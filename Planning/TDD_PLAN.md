@@ -1,405 +1,241 @@
 # TDD実装計画書
 
-## 1. TDDルール（絶対遵守）
+## 1. この計画書の位置づけ
 
-```
-1. RED:    失敗するテストを書く
-2. GREEN:  テストが通る最小限のコードを書く
-3. REFACTOR: コードを整理する（テストは通ったまま）
+この文書は、[WHOLE_POST_TEMPLATE_DESIGN.md](./WHOLE_POST_TEMPLATE_DESIGN.md) を実装に落とすためのTDD計画書とする。
+テストは本書を基準に先に作成し、実装はその後に行う。
+
+## 2. 絶対ルール
+
+- テストを先に書く
+- 失敗することを確認してから実装する
+- 通すための最小実装を書く
+- 通った後にのみ整理する
+- 実装都合でテスト期待値を書き換えない
+- 既存コードの都合ではなく、目的適合性を優先する
+
+## 3. 進行チェックリスト
+
+- [x] 詳細設計書を更新した
+- [x] 今回の保存単位を投稿全体テンプレートで固定した
+- [x] 手動タグ必須を固定した
+- [x] `tags + prompt` 必須を固定した
+- [x] 受け入れテストを先に追加した
+- [ ] テンプレート登録APIのユニットテストを追加した
+- [x] テンプレート検索ロジックのユニットテストを追加した
+- [x] 文言生成ロジックのユニットテストを追加した
+- [x] HTML/CSSレンダラのユニットテストを追加した
+- [x] 生成APIの統合テストを追加した
+- [x] 全テストを通した
+
+## 4. 今回のテスト対象
+
+### 4.1 テンプレート登録
+
+- 画像から構造JSONを抽出して保存する
+- 手動タグを必須とする
+- 自動タグを補助情報として保存する
+- 検索用テキストと埋め込みを生成する
+
+### 4.2 テンプレート検索
+
+- 手動タグ一致を優先する
+- 手動タグの類似を補助的に扱う
+- 自動タグは手動タグより弱く扱う
+- `prompt` のみで無関係なテンプレートを選ばない
+
+### 4.3 文言生成
+
+- 構造JSONを壊さない
+- 必須スロットを埋める
+- 文字数制約を守る
+
+### 4.4 レンダリング
+
+- HTML/CSSを生成する
+- UIプレビューに必要な情報を返す
+
+### 4.5 生成履歴
+
+- 入力タグと入力プロンプトを保存する
+- 採用テンプレートIDを保存する
+- 文言代入後の構造JSONを保存する
+- 出力HTML/CSSを保存する
+
+## 5. テスト戦略
+
+### 5.1 REDで先に固定するもの
+
+- APIの必須入力
+- 検索優先順位
+- 構造JSONの不変条件
+- 文字数制約
+- レスポンス形式
+
+### 5.2 GREENで許容するもの
+
+- モックによるLLM応答
+- モックによる埋め込み生成
+- 最小限のHTML/CSS出力
+
+### 5.3 REFACTORで整理するもの
+
+- サービス分割
+- 命名整理
+- DBアクセス整理
+- レンダリング処理の抽出
+
+## 6. 実装順序
+
+1. 受け入れテストを追加する
+2. テンプレート登録APIのテストを追加する
+3. テンプレート検索ロジックのテストを追加する
+4. 文言生成ロジックのテストを追加する
+5. レンダラのテストを追加する
+6. 生成APIの統合テストを追加する
+7. 実装する
+8. 全テストを通す
+
+## 7. テストケース一覧
+
+### 7.1 受け入れテスト
+
+- [x] 手動タグなしではテンプレート登録できない
+- [x] テンプレート画像を登録すると構造JSON、手動タグ、自動タグ、ベクトルが保存される
+- [x] `tags + prompt` で生成するとHTML/CSSプレビューが返る
+- [x] 生成時に採用テンプレートIDと生成履歴が保存される
+- [x] 無関係なタグのテンプレートは選ばれない
+
+### 7.2 テンプレート登録API
+
+- [ ] `name` が空なら400
+- [ ] `manual_tags` が空なら400
+- [ ] 画像がなければ400
+- [ ] 正常系で `template_id` が返る
+- [ ] 正常系で `structure_json` が返る
+- [ ] 正常系で `preview_html` と `preview_css` が返る
+
+### 7.3 テンプレート検索
+
+- [ ] 手動タグ完全一致が最優先で選ばれる
+- [ ] 手動タグが近い候補が次点に残る
+- [ ] 自動タグ一致だけの候補は手動タグ一致候補を超えない
+- [ ] 同点候補のみベクトル類似で再順位付けされる
+- [ ] 手動タグ無関係な候補は除外される
+
+### 7.4 文言生成
+
+- [ ] 必須スロットが全て埋まる
+- [ ] `slot.max_chars` を超える場合は短縮される
+- [ ] 構造JSONの要素数が変わらない
+- [ ] 構造JSONの `id` が変わらない
+- [ ] 位置とサイズが維持される
+
+### 7.5 HTML/CSSレンダリング
+
+- [ ] canvasサイズが反映される
+- [ ] text要素がHTMLへ出力される
+- [ ] style情報がCSSへ変換される
+- [ ] 差し込み文言がHTMLへ反映される
+
+### 7.6 生成API
+
+- [ ] `tags` が空なら422
+- [ ] `prompt` が空なら422
+- [ ] 候補なしなら404
+- [ ] 正常系で `generation_id` が返る
+- [ ] 正常系で `template_id` が返る
+- [ ] 正常系で `filled_structure` が返る
+- [ ] 正常系で `output_html` と `output_css` が返る
+
+## 8. 想定テストファイル構成
+
+```text
+backend/tests/
+├── acceptance/
+│   └── test_whole_post_template_flow.py
+├── integration/
+│   ├── test_generate_api.py
+│   └── test_template_registration_api.py
+└── unit/
+    ├── test_template_search_service.py
+    ├── test_structure_generation_service.py
+    ├── test_copy_generation_service.py
+    └── test_html_css_renderer.py
 ```
 
-**このドキュメントが正（Single Source of Truth）**
-- 実装がテストと合わない → 実装を修正
-- テストを実装に合わせて変えるのは禁止
+## 9. 受け入れテストの期待シナリオ
+
+### 9.1 登録
+
+1. ユーザーが画像、名前、手動タグを入力する
+2. APIが構造JSONと自動タグを生成する
+3. テンプレートが保存される
+4. 登録確認用のHTML/CSSが返る
+
+### 9.2 生成
+
+1. ユーザーが `tags` と `prompt` を入力する
+2. タグ優先でテンプレート候補が選ばれる
+3. 選ばれた構造に対して文言が生成される
+4. HTML/CSSプレビューが返る
+5. 履歴が保存される
+
+## 10. モック方針
+
+### 10.1 モックしてよいもの
+
+- LLMの構造抽出
+- LLMの自動タグ抽出
+- LLMの文言生成
+- Embedding生成
+
+### 10.2 モックしてはいけないもの
+
+- APIの入力バリデーション
+- 検索優先順位のロジック
+- 文字数制約
+- 構造JSONの不変条件
+- レスポンス形式
+
+## 11. 完了条件
+
+以下を満たした時点で、この計画に対する実装開始条件が満たされたとみなす。
+
+- [x] 詳細設計書が存在する
+- [x] チェックリスト形式で進捗管理できる
+- [x] 今回の方式に合わせてTDD計画が更新されている
+- [x] 受け入れテストが先に追加されている
+- [x] 実装前にREDを確認している
+
+## 12. 次期マイルストーン: 生成結果の後編集機能
+
+### 12.1 生成結果更新API
+
+- [ ] `generation_id` が存在しなければ404
+- [ ] テキスト要素の値を更新できる
+- [ ] 画像要素のURLを更新できる
+- [ ] 更新後のHTML/CSSが再生成される
+- [ ] 文字数制約超過時に警告を返す
+
+### 12.2 画像アップロードAPI
+
+- [ ] 画像がなければ400
+- [ ] 正常系で画像URLが返る
+- [ ] サポートしない形式は400
+
+### 12.3 フロントエンド編集機能
+
+- [ ] テキスト要素をクリックで編集できる
+- [ ] 画像要素をクリックでアップロードダイアログが開く
+- [ ] 保存ボタンでAPIに送信される
+- [ ] 編集後のプレビューが更新される
 
 ---
 
-## 2. ディレクトリ構成
-
-```
-make-images/
-├── backend/
-│   ├── app/
-│   │   ├── __init__.py
-│   │   ├── main.py                    # FastAPIエントリーポイント
-│   │   ├── config.py                  # 設定
-│   │   ├── models/
-│   │   │   ├── __init__.py
-│   │   │   └── component.py           # SQLAlchemyモデル
-│   │   ├── schemas/
-│   │   │   ├── __init__.py
-│   │   │   └── component.py           # Pydanticスキーマ
-│   │   ├── services/
-│   │   │   ├── __init__.py
-│   │   │   ├── embedding_service.py   # OpenAI Embedding
-│   │   │   ├── vector_search.py       # Phase 1: ベクトル検索
-│   │   │   ├── conflict_resolver.py   # Phase 2: 競合解決
-│   │   │   └── template_composer.py   # Phase 3: テンプレート合成
-│   │   ├── workflows/
-│   │   │   ├── __init__.py
-│   │   │   └── generation_workflow.py # LangChainワークフロー
-│   │   └── api/
-│   │       ├── __init__.py
-│   │       ├── components.py
-│   │       └── generate.py
-│   ├── tests/
-│   │   ├── __init__.py
-│   │   ├── conftest.py
-│   │   ├── unit/
-│   │   │   ├── test_embedding_service.py
-│   │   │   ├── test_vector_search.py
-│   │   │   ├── test_conflict_resolver.py
-│   │   │   └── test_template_composer.py
-│   │   └── integration/
-│   │       ├── test_generation_workflow.py
-│   │       └── test_api.py
-│   ├── requirements.txt
-│   └── docker-compose.yml             # PostgreSQL + pgvector
-├── frontend/
-│   └── ...
-└── Planning/
-```
-
----
-
-## 3. 実装順序
-
-### Phase 0: 基盤セットアップ
-
-#### 0.1 プロジェクト初期化
-
-```python
-# tests/unit/test_config.py
-
-def test_config_loads_from_env():
-    """環境変数から設定を読み込めること"""
-    config = get_config()
-    assert config.database_url is not None
-    assert config.openai_api_key is not None
-```
-
-#### 0.2 DBモデル
-
-```python
-# tests/unit/test_models.py
-
-def test_component_model_has_required_fields():
-    """Componentモデルが必要なフィールドを持つこと"""
-    component = Component(
-        name="test",
-        role="header",
-        description="テスト用ヘッダー"
-    )
-    assert component.name == "test"
-    assert component.role == "header"
-    assert component.description == "テスト用ヘッダー"
-
-def test_component_model_has_embedding_field():
-    """Componentモデルがembeddingフィールドを持つこと"""
-    component = Component(
-        name="test",
-        role="header",
-        description="テスト"
-    )
-    assert hasattr(component, 'embedding')
-```
-
----
-
-### Phase 1: embeddingベクトル検索
-
-#### 1.1 Embedding Service
-
-```python
-# tests/unit/test_embedding_service.py
-
-@pytest.mark.asyncio
-async def test_create_embedding_returns_vector():
-    """テキストからembeddingベクトルを生成できること"""
-    service = EmbeddingService()
-    embedding = await service.create_embedding("新卒採用 ポップ")
-
-    assert embedding is not None
-    assert len(embedding) == 1536  # OpenAI embedding dimension
-
-@pytest.mark.asyncio
-async def test_similar_texts_have_high_similarity():
-    """類似テキストは高い類似度を持つこと"""
-    service = EmbeddingService()
-    emb1 = await service.create_embedding("新卒採用")
-    emb2 = await service.create_embedding("新入社員採用")
-    emb3 = await service.create_embedding("料理レシピ")
-
-    sim_similar = service.cosine_similarity(emb1, emb2)
-    sim_different = service.cosine_similarity(emb1, emb3)
-
-    assert sim_similar > sim_different
-```
-
-#### 1.2 Vector Search
-
-```python
-# tests/unit/test_vector_search.py
-
-@pytest.mark.asyncio
-async def test_search_returns_components_by_similarity(db_session, seed_components):
-    """embeddingで類似コンポーネントを検索できること"""
-    search = VectorSearchService(db_session)
-
-    results = await search.search(
-        query_tags=["新卒採用", "ポップ"],
-        limit=10
-    )
-
-    assert len(results) > 0
-    assert all(hasattr(r, 'similarity') for r in results)
-    # 類似度順にソートされていること
-    similarities = [r.similarity for r in results]
-    assert similarities == sorted(similarities, reverse=True)
-
-@pytest.mark.asyncio
-async def test_search_handles_tag_variations(db_session, seed_components):
-    """表記揺れに対応できること"""
-    search = VectorSearchService(db_session)
-
-    results1 = await search.search(query_tags=["新卒採用"])
-    results2 = await search.search(query_tags=["新入社員採用"])
-
-    # 同じ意味のタグで似たコンポーネントが取れること
-    ids1 = {r.id for r in results1[:3]}
-    ids2 = {r.id for r in results2[:3]}
-    assert len(ids1 & ids2) > 0  # 共通のコンポーネントがある
-```
-
----
-
-### Phase 2: LLM競合解決
-
-#### 2.1 Conflict Resolver
-
-```python
-# tests/unit/test_conflict_resolver.py
-
-@pytest.mark.asyncio
-async def test_detect_conflicts_by_role():
-    """同一roleのコンポーネントを競合として検出すること"""
-    resolver = ConflictResolver()
-
-    components = [
-        Component(id="1", name="header_pop", role="header"),
-        Component(id="2", name="header_formal", role="header"),
-        Component(id="3", name="body_1", role="body"),
-    ]
-
-    conflicts = resolver.detect_conflicts(components)
-
-    assert "header" in conflicts
-    assert len(conflicts["header"]) == 2
-    assert "body" not in conflicts  # bodyは1つなので競合なし
-
-@pytest.mark.asyncio
-async def test_resolve_conflict_selects_one(mock_llm):
-    """LLMが文脈に基づいて1つを選択すること"""
-    mock_llm.return_value = {"selected_id": "1"}
-
-    resolver = ConflictResolver(llm=mock_llm)
-
-    conflicting = [
-        Component(id="1", name="header_pop", role="header"),
-        Component(id="2", name="header_formal", role="header"),
-    ]
-
-    selected = await resolver.resolve(
-        conflicting_components=conflicting,
-        user_prompt="若者向けの明るい採用告知",
-        role="header"
-    )
-
-    assert selected.id == "1"  # ポップな方が選ばれる
-```
-
----
-
-### Phase 3: セクションテンプレート合成
-
-#### 3.1 Template Composer
-
-```python
-# tests/unit/test_template_composer.py
-
-def test_compose_merges_components_by_role():
-    """役割ごとにコンポーネントを配置すること"""
-    composer = TemplateComposer()
-
-    components = [
-        Component(role="header", template_html="<header>{{title}}</header>"),
-        Component(role="body", template_html="<main>{{content}}</main>"),
-        Component(role="cta", template_html="<button>{{cta_text}}</button>"),
-    ]
-
-    result = composer.compose(components)
-
-    assert "<header>" in result.html
-    assert "<main>" in result.html
-    assert "<button>" in result.html
-
-def test_compose_fills_slots():
-    """スロットに値を埋め込むこと"""
-    composer = TemplateComposer()
-
-    component = Component(
-        role="header",
-        template_html="<h1>{{title}}</h1>",
-        slots={"title": {"type": "text", "max_chars": 20}}
-    )
-
-    result = composer.fill_slots(
-        component=component,
-        values={"title": "新卒採用開始！"}
-    )
-
-    assert "<h1>新卒採用開始！</h1>" in result
-
-def test_compose_respects_max_chars():
-    """文字数制限を守ること"""
-    composer = TemplateComposer()
-
-    component = Component(
-        role="header",
-        template_html="<h1>{{title}}</h1>",
-        slots={"title": {"type": "text", "max_chars": 10}}
-    )
-
-    result = composer.fill_slots(
-        component=component,
-        values={"title": "これは非常に長いタイトルです"}
-    )
-
-    # 10文字以内に切り詰められること
-    assert len(result.slot_values["title"]) <= 10
-```
-
----
-
-### Phase 4: ワークフロー統合
-
-#### 4.1 Generation Workflow (LangChain)
-
-```python
-# tests/integration/test_generation_workflow.py
-
-@pytest.mark.asyncio
-async def test_full_workflow(db_session, seed_components, mock_llm):
-    """全フェーズを通したワークフローが動作すること"""
-    workflow = GenerationWorkflow(db_session, mock_llm)
-
-    result = await workflow.run(
-        tags=["新卒採用", "ポップ"],
-        user_prompt="若者向けの明るい採用告知を作りたい",
-        aspect_ratio="1:1"
-    )
-
-    assert result.output_html is not None
-    assert result.output_css is not None
-    assert len(result.selected_components) > 0
-
-@pytest.mark.asyncio
-async def test_workflow_handles_no_conflicts(db_session, seed_components_no_conflict):
-    """競合がない場合もワークフローが動作すること"""
-    workflow = GenerationWorkflow(db_session)
-
-    result = await workflow.run(
-        tags=["ユニーク"],
-        user_prompt="テスト"
-    )
-
-    assert result.output_html is not None
-```
-
----
-
-### Phase 5: API
-
-```python
-# tests/integration/test_api.py
-
-@pytest.mark.asyncio
-async def test_post_generate(client, seed_components):
-    """POST /api/generate でHTML/CSSを生成できること"""
-    response = await client.post("/api/generate", json={
-        "tags": ["新卒採用", "ポップ"],
-        "prompt": "若者向けの採用告知",
-        "aspect_ratio": "1:1"
-    })
-
-    assert response.status_code == 200
-    data = response.json()
-    assert "output_html" in data
-    assert "output_css" in data
-    assert "selected_components" in data
-```
-
----
-
-## 4. Fixtures
-
-```python
-# tests/conftest.py
-
-import pytest
-from testcontainers.postgres import PostgresContainer
-
-@pytest.fixture(scope="session")
-def postgres_container():
-    """テスト用PostgreSQLコンテナ（pgvector付き）"""
-    with PostgresContainer("pgvector/pgvector:pg16") as postgres:
-        yield postgres
-
-@pytest.fixture
-async def db_session(postgres_container):
-    """DBセッション"""
-    # ... セットアップ
-
-@pytest.fixture
-def mock_llm(mocker):
-    """Claude APIモック"""
-    return mocker.patch("app.services.conflict_resolver.call_claude")
-
-@pytest.fixture
-async def seed_components(db_session):
-    """テスト用コンポーネント"""
-    components = [
-        Component(
-            name="採用ヘッダー_ポップ",
-            role="header",
-            description="新卒採用 ポップ 明るい 若手",
-            template_html="<header>{{title}}</header>"
-        ),
-        Component(
-            name="採用ヘッダー_フォーマル",
-            role="header",
-            description="新卒採用 フォーマル 堅い ビジネス",
-            template_html="<header class='formal'>{{title}}</header>"
-        ),
-        # ... 他のコンポーネント
-    ]
-    # DB投入 & embedding生成
-```
-
----
-
-## 5. 実行コマンド
-
-```bash
-# 全テスト
-cd backend && pytest
-
-# 特定フェーズのテスト
-pytest tests/unit/test_vector_search.py
-
-# カバレッジ
-pytest --cov=app --cov-report=html
-
-# 失敗時停止
-pytest -x
-```
+## 13. 今回やらないテスト
+
+- 画像書き出し結果そのものの画素比較
+- 認証認可
+- 本番用外部サービス連携の実通信テスト
+- 複数部品分解方式の検証
