@@ -95,6 +95,7 @@ async def upload_template(
     file: UploadFile = File(...),
     name: str | None = Form(None),
     manual_tags: str | None = Form(None),
+    reference_image: UploadFile | None = File(None),
     db: Session = Depends(get_db),
 ):
     Base.metadata.create_all(bind=db.get_bind())
@@ -169,6 +170,16 @@ async def upload_template(
         ),
     )
 
+    # 精度計算（reference_imageが指定された場合）
+    accuracy = None
+    if reference_image is not None:
+        accuracy = await _calculate_accuracy(
+            reference_image=reference_image,
+            rendered_html=rendered.html,
+            rendered_css=rendered.css,
+            structure_json=structure_json,
+        )
+
     return {
         "message": "success",
         "template_id": template_id,
@@ -177,6 +188,7 @@ async def upload_template(
         "structure_json": structure_json,
         "preview_html": rendered.html,
         "preview_css": rendered.css,
+        "accuracy": accuracy,
     }
 
 
@@ -2037,3 +2049,55 @@ def _calculate_image_difference(element: dict[str, Any], reference_image: Image.
     diff = ImageChops.difference(image, reference_region)
     mean = ImageStat.Stat(diff).mean
     return sum(mean) / len(mean)
+
+
+async def _calculate_accuracy(
+    reference_image: UploadFile,
+    rendered_html: str,
+    rendered_css: str,
+    structure_json: dict,
+) -> float:
+    """元画像と生成結果の一致精度を計算する
+
+    Args:
+        reference_image: 元画像（PNG/JPG）
+        rendered_html: 生成されたHTML
+        rendered_css: 生成されたCSS
+        structure_json: 構造JSON（canvasサイズ取得用）
+
+    Returns:
+        一致精度（0-100%）。100が完全一致。
+    """
+    from app.services.image_comparator import ImageComparator
+    from app.services.screenshot_service import capture_screenshot
+
+    # 元画像を読み込み
+    ref_content = await reference_image.read()
+    comparator = ImageComparator()
+    ref_img = comparator.load_image(ref_content)
+
+    # canvasサイズを取得
+    canvas = structure_json.get("canvas", {})
+    width = canvas.get("width", 1080)
+    height = canvas.get("height", 1080)
+
+    # 生成HTMLをスクリーンショット化
+    try:
+        screenshot_bytes = await capture_screenshot(
+            html=rendered_html,
+            css=rendered_css,
+            width=width,
+            height=height,
+        )
+        generated_img = comparator.load_image(screenshot_bytes)
+    except Exception:
+        # スクリーンショット取得に失敗した場合は精度計算をスキップ
+        return None
+
+    # 比較（閾値5で微小な差分を無視）
+    result = comparator.compare(ref_img, generated_img, threshold=5)
+
+    # 一致率を計算（100 - 差分率）
+    accuracy = 100.0 - result.diff_percentage
+
+    return round(accuracy, 2)

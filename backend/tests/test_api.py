@@ -121,7 +121,8 @@ def test_upload_pptx_template_allows_without_reference_image(
     mock_extract_pptx.assert_called_once()
 
 
-def test_openapi_does_not_expose_reference_image_for_templates_endpoint():
+def test_openapi_exposes_reference_image_for_templates_endpoint():
+    """reference_imageパラメータがAPIに公開されていること"""
     response = client.get("/openapi.json")
 
     assert response.status_code == 200
@@ -130,7 +131,7 @@ def test_openapi_does_not_expose_reference_image_for_templates_endpoint():
     component_name = multipart_schema_ref.split("/")[-1]
     properties = schema["components"]["schemas"][component_name]["properties"]
 
-    assert "reference_image" not in properties
+    assert "reference_image" in properties
 
 
 @patch("app.main._extract_from_pptx")
@@ -393,3 +394,64 @@ def test_update_template_requires_structure_json():
     """structure_jsonが必須"""
     response = client.patch("/api/templates/some-id", json={})
     assert response.status_code == 422
+
+
+# ============================================================
+# reference_image による精度計算テスト
+# ============================================================
+
+
+@patch("app.main.extract_template_structure")
+@patch("app.main.add_template_vector")
+@patch("app.main.get_embedding")
+def test_upload_template_with_reference_image_returns_accuracy(
+    mock_emb, mock_add_vec, mock_extract
+):
+    """reference_imageを指定した場合、accuracyがレスポンスに含まれること"""
+    mock_extract.return_value = (sample_structure(), "Mock atmosphere", ["#採用", "#テスト"])
+    mock_emb.return_value = [0.1] * 8
+
+    # 100x100の赤い画像を作成
+    from PIL import Image
+    import io
+
+    ref_img = Image.new("RGB", (100, 100), color="red")
+    ref_buffer = io.BytesIO()
+    ref_img.save(ref_buffer, format="PNG")
+    ref_bytes = ref_buffer.getvalue()
+
+    files = {
+        "file": ("test.png", b"fake_image", "image/png"),
+        "reference_image": ("reference.png", ref_bytes, "image/png"),
+    }
+    data = {"name": "test_template", "manual_tags": '["採用", "ポップ"]'}
+
+    response = client.post("/api/templates", files=files, data=data)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "accuracy" in payload
+    assert payload["accuracy"] is not None
+    assert isinstance(payload["accuracy"], (int, float))
+    assert 0 <= payload["accuracy"] <= 100
+
+
+@patch("app.main.extract_template_structure")
+@patch("app.main.add_template_vector")
+@patch("app.main.get_embedding")
+def test_upload_template_without_reference_image_returns_null_accuracy(
+    mock_emb, mock_add_vec, mock_extract
+):
+    """reference_imageを指定しない場合、accuracyはnullであること"""
+    mock_extract.return_value = (sample_structure(), "Mock atmosphere", ["#採用", "#テスト"])
+    mock_emb.return_value = [0.1] * 8
+
+    files = {"file": ("test.png", b"fake_image", "image/png")}
+    data = {"name": "test_template", "manual_tags": '["採用", "ポップ"]'}
+
+    response = client.post("/api/templates", files=files, data=data)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "accuracy" in payload
+    assert payload["accuracy"] is None
